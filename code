@@ -3,41 +3,54 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Oscillo SVG — Mode Aléatoire</title>
+<title>Oscillo SVG — Aléatoire (quiz) + Tracer (sans quiz)</title>
 <style>
-  :root { --w: 500px; --h: 500px; --pad: 10px; --uiw: 520px; }
+  :root { --w: 500px; --h: 500px; --uiw: 520px; }
   body { font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif; background:#f6f7fb; color:#111; }
-  #export-area { border:1px solid #333; background:#fff; padding:10px; width: max(calc(var(--uiw) + 2*var(--pad)), 560px); margin: 16px auto; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
-  #scope-container { border:2px solid #333; margin-bottom:10px; background:#fff; }
+  #export-area { border:1px solid #333; background:#fff; padding:10px; width:max(calc(var(--uiw) + 20px),620px); margin:16px auto; box-shadow:0 6px 18px rgba(0,0,0,.08); position: relative; }
+  #scope-container { border:2px solid #333; margin-bottom:10px; background:#fff; position: relative; }
   #scope { width: var(--w); height: 528px; display:block; }
   button { padding:8px 10px; border:1px solid #444; background:#fafafa; cursor:pointer; border-radius:6px; }
   button:hover { background:#f0f0f0; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
   fieldset { border:1px solid #666; padding:10px; border-radius:8px; }
   legend { font-weight:700 }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items: center; }
   .input-group { display:flex; align-items:center; gap:6px; margin:6px 0; }
-  input[type="number"] { width:110px; padding:4px 6px; }
+  input[type="number"] { width:120px; padding:4px 6px; }
   select { padding:4px 6px; }
   #extra-zone { width: var(--uiw); }
   .muted { opacity:.75; font-size:.9em }
-  .chip { display:inline-block; padding:2px 8px; border:1px solid #999; border-radius:999px; font-size:.85em; }
+  /* Quiz */
+  #quiz-modal {
+    position: fixed; right: 16px; bottom: 16px; z-index: 1000;
+    width: min(420px, 90vw);
+    background: #ffffff; border: 1px solid #99a; border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(0,0,0,.18); padding: 12px; display: none;
+  }
+  #quiz-modal h3 { margin: 0 0 8px 0; }
+  #quiz-modal .qrow { display:flex; gap:8px; align-items:center; margin:6px 0; }
+  #quiz-modal .qrow label { width: 170px; }
+  #quiz-result { margin-top:8px; padding:8px; background:#f9fafc; border:1px solid #ccd; border-radius:8px; display:none; white-space:pre-wrap; max-height: 200px; overflow:auto; }
+  #quiz-actions { margin-top:10px; display:flex; gap:8px; }
+  .ok { color:#0a0; font-weight:600; }
+  .err { color:#a00; font-weight:600; }
 </style>
 </head>
 <body>
 
 <div id="export-area">
   <div id="scope-container">
-    <svg id="scope" viewBox="0 0 500 528" xmlns="http://www.w3.org/2000/svg" aria-label="Écran d'oscilloscope">
-      <!-- Dessin via JS -->
-    </svg>
+    <svg id="scope" viewBox="0 0 500 528" xmlns="http://www.w3.org/2000/svg" aria-label="Écran d'oscilloscope"></svg>
   </div>
 
   <div class="row">
     <button id="toggle-zone">Afficher / Cacher paramètres</button>
     <button id="export-btn">Enregistrer PNG</button>
     <button id="reset-btn">Réinitialiser</button>
-    <button id="rand-once">Aléatoire (une fois)</button>
-    <span class="chip" id="chip-last">Dernier tirage: —</span>
+
+    <button id="rand-once">Aléatoire (quiz)</button>
+    <button id="apply-btn" title="Tracer selon les paramètres ci-dessous sans questionnaire">Tracer (sans quiz)</button>
   </div>
 
   <div id="extra-zone" style="display:none; margin-top:10px;">
@@ -46,7 +59,7 @@
       <div class="row">
         <div class="input-group">
           <label for="signal-type">Type:</label>
-          <select id="signal-type" title="Type de signal">
+          <select id="signal-type">
             <option value="0">Sinus</option>
             <option value="1">Carré (50%)</option>
             <option value="2">Triangle</option>
@@ -58,27 +71,26 @@
         </div>
         <div class="input-group">
           <label for="amplitude">Amplitude:</label>
-          <input type="number" id="amplitude" step="0.1" value="1" min="0" max="50">
+          <input type="number" id="amplitude" step="1" value="1" inputmode="decimal">
         </div>
         <div class="input-group">
-          <label for="signal-frequency-value">Fréquence:</label>
-          <input type="number" id="signal-frequency-value" step="0.1" value="50" min="0.01" max="1e6">
-          <select id="signal-frequency-unit">
-            <option value="1">Hz</option>
-            <option value="2">kHz</option>
+          <label for="signal-frequency-value">Fréquence (Hz):</label>
+          <input type="number" id="signal-frequency-value" step="1" value="50" min="10" max="60" inputmode="numeric" pattern="[0-9]*">
+          <select id="signal-frequency-unit" disabled>
+            <option value="1" selected>Hz</option>
           </select>
         </div>
         <div class="input-group" id="duty-wrap" style="display:none;">
           <label for="duty">Duty %:</label>
-          <input type="number" id="duty" step="1" value="75" min="1" max="99">
+          <input type="number" id="duty" step="1" value="75" min="1" max="99" inputmode="numeric" pattern="[0-9]*">
         </div>
         <div class="input-group">
           <label for="phase">Phase (°):</label>
-          <input type="number" id="phase" step="1" value="0" min="-360" max="360">
+          <input type="number" id="phase" step="1" value="0" min="-360" max="360" inputmode="decimal">
         </div>
         <div class="input-group">
           <label for="offset">Offset:</label>
-          <input type="number" id="offset" step="0.1" value="0" min="-100" max="100">
+          <input type="number" id="offset" step="1" value="0" min="-100" max="100" inputmode="decimal">
         </div>
       </div>
     </fieldset>
@@ -88,275 +100,301 @@
       <div class="row">
         <div class="input-group">
           <label for="scope-scale-volt">Volt/div:</label>
-          <input type="number" id="scope-scale-volt" step="0.1" value="1" min="0.01" max="1000">
+          <input type="number" id="scope-scale-volt" step="1" value="1" inputmode="numeric" pattern="[0-9]*">
         </div>
         <div class="input-group">
-          <label for="scope-scale-freq-value">Temps/div:</label>
-          <input type="number" id="scope-scale-freq-value" step="0.1" value="20" min="0.01" max="1e6">
-          <select id="scope-scale-freq-unit">
-            <option value="1">µs</option>
-            <option value="2" selected>ms</option>
-          </select>
+          <label for="scope-scale-freq-value">Temps/div (ms):</label>
+          <input type="number" id="scope-scale-freq-value" step="1" value="20" inputmode="numeric" pattern="[0-9]*">
         </div>
         <div class="input-group">
           <label for="hpos">Pos. horizontale:</label>
-          <input type="number" id="hpos" step="1" value="0" min="-1000" max="1000">
+          <input type="number" id="hpos" step="1" value="0" inputmode="decimal">
         </div>
       </div>
-      <div class="row" style="margin-top:6px;">
-        <div class="input-group">
-          <input type="checkbox" id="auto-rand" />
-          <label for="auto-rand">Aléatoire auto</label>
-        </div>
-        <div class="input-group">
-          <label for="rand-interval">Toutes les (s):</label>
-          <input type="number" id="rand-interval" step="0.1" min="0.2" value="2">
-        </div>
+      <div class="muted">
+        f 10–60 Hz • 5 graduations/div • Aléatoire: V/T-div ∈ {1,5,10,15,20} • phase/offset/hpos conservés • amplitude ≤ V/div×5 − |offset|
       </div>
-      <div class="muted">Astuce : l’aléatoire ajuste aussi Volt/Div et Temps/Div pour garder un signal lisible.</div>
     </fieldset>
   </div>
 </div>
 
+<!-- QUIZ MODAL -->
+<div id="quiz-modal" role="dialog" aria-label="Quiz signal">
+  <h3>Quiz (analyse du signal affiché)</h3>
+  <div class="qrow"><label for="q-umax">Umax (V) :</label><input type="number" id="q-umax" step="0.01"></div>
+  <div class="qrow"><label for="q-ueff">Ueff (V) :</label><input type="number" id="q-ueff" step="0.01"></div>
+  <div class="qrow"><label for="q-amp">Amplitude (V) :</label><input type="number" id="q-amp" step="0.01"></div>
+  <div class="qrow"><label for="q-freq">Fréquence (Hz) :</label><input type="number" id="q-freq" step="0.01"></div>
+  <div id="quiz-result"></div>
+  <div id="quiz-actions">
+    <button id="quiz-submit">Valider</button>
+    <button id="quiz-close">Fermer</button>
+  </div>
+  <div class="muted" style="margin-top:6px;">Tolérance ±2% (ou ±0.02 autour de 0).</div>
+</div>
+
 <script>
-/* ---------- Base oscillo (reprend ta version améliorée) ---------- */
-const svg = document.getElementById('scope');
-const NS = svg.namespaceURI;
-const W = 500, H = 500, FOOTER_H = 28;
-const rows = 10, cols = 10;
-const cellW = W / cols, cellH = H / rows;
+/* ---------- Constantes & groupes ---------- */
+const svg=document.getElementById('scope');const NS=svg.namespaceURI;
+const W=500,H=500,FOOTER_H=28;const rows=10,cols=10;
+const cellW=W/cols,cellH=H/rows;
 
-const gGrid = newEl('g', { id:'grid' });
-const gWave = newEl('g', { id:'wave' });
-const gUI   = newEl('g', { id:'ui'   });
-svg.appendChild(gGrid); svg.appendChild(gWave); svg.appendChild(gUI);
+const gGrid=newEl('g'),gWave=newEl('g'),gUI=newEl('g');
+svg.appendChild(gGrid);svg.appendChild(gWave);svg.appendChild(gUI);
+const txtVolt=newEl('text',{x:10,y:H+FOOTER_H-6,'font-size':14,fill:'#000'});
+const txtTime=newEl('text',{x:300,y:H+FOOTER_H-6,'font-size':14,fill:'#000'});
+gUI.appendChild(txtVolt);gUI.appendChild(txtTime);
 
-const txtVolt = newEl('text', { x:10, y:H+FOOTER_H-6, 'font-size':14, fill:'#000' });
-const txtTime = newEl('text', { x:300, y:H+FOOTER_H-6, 'font-size':14, fill:'#000' });
-gUI.appendChild(txtVolt); gUI.appendChild(txtTime);
+/* ---------- État ---------- */
+let state={signalType:0,amplitude:1,fVal:50,fUnit:1,offsetV:0,duty:75,phaseDeg:0,vDiv:1,tDivVal:20,tDivUnit:2,hpos:0};
 
-let state = {
-  signalType: 0,
-  amplitude: 1,
-  fVal: 50,
-  fUnit: 1,        // 1=Hz, 2=kHz
-  offsetV: 0,
-  duty: 75,        // rectangulaire
-  phaseDeg: 0,
-  vDiv: 1,         // Volt/div
-  tDivVal: 20,
-  tDivUnit: 2,     // 1=µs, 2=ms
-  hpos: 0
-};
+/* ---------- Utils ---------- */
+function newEl(tag,attrs={}){const el=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);return el;}
+function clamp(v,lo,hi){return Math.min(hi,Math.max(lo,v));}
+function hz(){return clamp(Math.round(state.fVal)||10,10,60);} // Hz 10–60
+function secondsPerDiv(){return state.tDivVal*1e-3;} // ms
+function pxPerVolt(){return (H/rows)/state.vDiv;}
+function randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
+function fmt(n,dec=2){return (+n).toFixed(dec);}
+const allowedScale=[1,5,10,15,20];
 
-function newEl(tag, attrs={}){ const el = document.createElementNS(NS, tag); for (const [k,v] of Object.entries(attrs)) el.setAttribute(k,v); return el; }
-function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
-function hz(){ return state.fVal * (state.fUnit === 2 ? 1000 : 1); }
-function secondsPerDiv(){ return state.tDivVal * (state.tDivUnit === 2 ? 1e-3 : 1e-6); }
-function pxPerVolt(){ return cellH / state.vDiv; }
-
-function drawGrid() {
+/* ---------- Grille + 5 graduations/div ---------- */
+function drawGrid(){
   gGrid.replaceChildren();
-  gGrid.appendChild(newEl('rect', { x:0, y:0, width:W, height:H, fill:'none', stroke:'#333', 'stroke-width':2 }));
-  const gridPath = [];
-  for (let i=0;i<=cols;i++){ const x=i*cellW; gridPath.push(`M${x},0 V${H}`); }
-  for (let j=0;j<=rows;j++){ const y=j*cellH; gridPath.push(`M0,${y} H${W}`); }
-  gGrid.appendChild(newEl('path',{ d:gridPath.join(' '), stroke:'#888','stroke-width':1, fill:'none' }));
-  gGrid.appendChild(newEl('line',{ x1:0,y1:H/2,x2:W,y2:H/2,stroke:'#666','stroke-width':2 }));
-  gGrid.appendChild(newEl('line',{ x1:W/2,y1:0,x2:W/2,y2:H,stroke:'#666','stroke-width':2 }));
-  const ticks=[];
-  for (let i=0;i<=cols*4;i++){ const x=i*(cellW/4); ticks.push(`M${x},${H/2-5} V${H/2+5}`); }
-  for (let j=0;j<=rows*4;j++){ const y=j*(cellH/4); ticks.push(`M${W/2-5},${y} H${W/2+5}`); }
-  gGrid.appendChild(newEl('path',{ d:ticks.join(' '), stroke:'#aaa', 'stroke-width':1, fill:'none' }));
+  gGrid.appendChild(newEl('rect',{x:0,y:0,width:W,height:H,fill:'none',stroke:'#333','stroke-width':2}));
+  const gridPath=[];
+  for(let i=0;i<=cols;i++) gridPath.push(`M${i*cellW},0 V${H}`);
+  for(let j=0;j<=rows;j++) gridPath.push(`M0,${j*cellH} H${W}`);
+  gGrid.appendChild(newEl('path',{d:gridPath.join(' '),stroke:'#888','stroke-width':1,fill:'none'}));
+  gGrid.appendChild(newEl('line',{x1:0,y1:H/2,x2:W,y2:H/2,stroke:'#666','stroke-width':2}));
+  gGrid.appendChild(newEl('line',{x1:W/2,y1:0,x2:W/2,y2:H,stroke:'#666','stroke-width':2}));
+  const tickLen=5, minor=[];
+  for(let i=0;i<=cols*5;i++){const x=i*(cellW/5); minor.push(`M${x},${H/2 - tickLen} V${H/2 + tickLen}`);}
+  for(let j=0;j<=rows*5;j++){const y=j*(cellH/5); minor.push(`M${W/2 - tickLen},${y} H${W/2 + tickLen}`);}
+  gGrid.appendChild(newEl('path',{d:minor.join(' '),stroke:'#aaa','stroke-width':1,fill:'none'}));
 }
 
-function drawSignal() {
+/* ---------- Signal ---------- */
+function drawSignal(){
   gWave.replaceChildren();
-  const f = hz();
-  const tDiv = secondsPerDiv();
-  const totalTime = tDiv * cols;
-  const samples = W;
-  const amp = state.amplitude;
-  const yScale = pxPerVolt();
-  const phase0 = state.phaseDeg * Math.PI/180;
+  const f=hz(),tDiv=secondsPerDiv(),totalTime=tDiv*cols,samples=W,amp=state.amplitude,yScale=pxPerVolt(),phase0=state.phaseDeg*Math.PI/180;
+  const y0=H/2-state.offsetV*yScale;
+  gWave.appendChild(newEl('polygon',{points:`0,${y0} 12,${y0-10} 12,${y0+10}`,fill:'red'}));
+  const label=newEl('text',{x:16,y:y0+5,'font-size':12,fill:'red'});label.textContent='Offset';gWave.appendChild(label);
 
-  const y0 = H/2 - state.offsetV * yScale;
-  // flèche offset et label
-  const arrow = newEl('polygon', { points:`0,${y0} 12,${y0-10} 12,${y0+10}`, fill:'red' });
-  const label = newEl('text', { x:16, y:y0+5, 'font-size':12, fill:'red' }); label.textContent = 'Offset';
-  gWave.appendChild(arrow); gWave.appendChild(label);
-
-  // signal
-  let d = '';
-  for (let x=0; x<samples; x++){
-    const t = ((x - state.hpos) / W) * totalTime;
-    const ph = 2*Math.PI*f*t + phase0;
+  let d='';
+  for(let x=0;x<samples;x++){
+    const t=((x-state.hpos)/W)*totalTime,ph=2*Math.PI*f*t+phase0;
     let yv;
     switch(state.signalType){
-      case 1: yv = Math.sign(Math.sin(ph)) || 1; break;             // carré 50%
-      case 2: { const u = ((ph/(2*Math.PI))%1+1)%1; yv = 2*Math.abs(2*u-1)-1; break; } // triangle
-      case 3: { const u = ((ph/(2*Math.PI))%1+1)%1; yv = 2*u-1; break; }               // dent de scie
-      case 4: { const duty = clamp(state.duty,1,99)/100; const u=((ph/(2*Math.PI))%1+1)%1; yv = (u<duty)?1:-1; break; } // rect %
-      case 5: yv = Math.max(0, Math.sin(ph)); break;                 // demi-redressé
-      case 6: yv = Math.abs(Math.sin(ph)); break;                    // double-redressé
-      default: yv = Math.sin(ph);                                    // sinus
+      case 1: yv=Math.sign(Math.sin(ph))||1; break;                       // carré 50%
+      case 2: { const u=((ph/(2*Math.PI))%1+1)%1; yv=2*Math.abs(2*u-1)-1; break; } // triangle
+      case 3: { const u=((ph/(2*Math.PI))%1+1)%1; yv=2*u-1; break; }      // dent de scie
+      case 4: { const duty=clamp(state.duty,1,99)/100; const u=((ph/(2*Math.PI))%1+1)%1; yv=(u<duty)?1:-1; break;} // rect %
+      case 5: yv=Math.max(0,Math.sin(ph)); break;                         // demi-redressé
+      case 6: yv=Math.abs(Math.sin(ph)); break;                           // double-redressé
+      default: yv=Math.sin(ph);                                           // sinus
     }
-    const v = yv * amp + state.offsetV;
-    const y = H/2 - v * yScale;
-    d += (x? ' L':'M') + x + ',' + y.toFixed(2);
+    const v=yv*amp+state.offsetV;
+    const y=H/2 - v*yScale;
+    d+=(x?' L':'M')+x+','+y.toFixed(2);
   }
-  gWave.appendChild(newEl('path',{ d, stroke:'lime','stroke-width':2, fill:'none', 'shape-rendering':'geometricPrecision' }));
+  gWave.appendChild(newEl('path',{d,stroke:'lime','stroke-width':2,fill:'none'}));
 }
 
-function updateLabels(){
-  txtVolt.textContent = `${trimNum(state.vDiv)} V/div`;
-  txtTime.textContent = `${trimNum(state.tDivVal)} ${state.tDivUnit===2?'ms':'µs'}/div`;
-}
-function trimNum(n){ const s=(+n).toFixed(6); return s.replace(/\.?0+$/,''); }
-
+/* ---------- Labels & rendu ---------- */
+function updateLabels(){ txtVolt.textContent=state.vDiv+' V/div'; txtTime.textContent=state.tDivVal+' ms/div'; }
 function render(){ drawGrid(); drawSignal(); updateLabels(); }
 
-/* ---------- UI binding ---------- */
-const $ = id => document.getElementById(id);
-$('toggle-zone').onclick = () => { const ez=$('extra-zone'); ez.style.display = (ez.style.display==='none')?'block':'none'; };
-$('reset-btn').onclick = () => { state = { signalType:0, amplitude:1, fVal:50, fUnit:1, offsetV:0, duty:75, phaseDeg:0, vDiv:1, tDivVal:20, tDivUnit:2, hpos:0 }; applyStateToInputs(); render(); };
-$('signal-type').onchange = e => { state.signalType = +e.target.value; $('duty-wrap').style.display = (state.signalType === 4) ? 'flex' : 'none'; render(); };
-$('amplitude').oninput = e => { state.amplitude = +e.target.value; render(); };
-$('signal-frequency-value').oninput = e => { state.fVal = clamp(+e.target.value, 0.01, 1e6); render(); };
-$('signal-frequency-unit').onchange = e => { state.fUnit = +e.target.value; render(); };
-$('offset').oninput = e => { state.offsetV = +e.target.value; render(); };
-$('duty').oninput = e => { state.duty = +e.target.value; if(state.signalType===4) render(); };
-$('phase').oninput = e => { state.phaseDeg = +e.target.value; render(); };
-$('scope-scale-volt').oninput = e => { state.vDiv = Math.max(0.01, +e.target.value); render(); };
-$('scope-scale-freq-value').oninput = e => { state.tDivVal = Math.max(0.01, +e.target.value); render(); };
-$('scope-scale-freq-unit').onchange = e => { state.tDivUnit = +e.target.value; render(); };
-$('hpos').oninput = e => { state.hpos = +e.target.value; render(); };
+/* ---------- T/div cohérent avec f ---------- */
+function chooseCoherentTdivMsFromF(fHz){
+  const k = (Math.random()<0.5)?2:4; // ~2 ou ~4 périodes visibles
+  const tDivMsTarget = (k*1000)/(fHz*10);
+  let best=allowedScale[0], bestErr=Infinity;
+  for (const v of allowedScale){ const err=Math.abs(v - tDivMsTarget); if (err<bestErr){best=v;bestErr=err;} }
+  return best;
+}
 
-/* ---------- Export PNG ---------- */
-$('export-btn').onclick = () => {
-  const clone = svg.cloneNode(true);
-  const bg = newEl('rect', { x:0, y:0, width:W, height:H+FOOTER_H, fill:'#ffffff' });
-  clone.insertBefore(bg, clone.firstChild);
-  const svgData = new XMLSerializer().serializeToString(clone);
-  const url = URL.createObjectURL(new Blob([svgData], { type:'image/svg+xml;charset=utf-8' }));
-  const img = new Image();
-  img.onload = () => {
-    const margin = 10, canvas = document.createElement('canvas');
-    canvas.width = W + margin*2; canvas.height = (H+FOOTER_H) + margin*2;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(img, margin, margin);
-    URL.revokeObjectURL(url);
-    canvas.toBlob(blob => {
-      const a = document.createElement('a');
-      a.download = 'oscilloscope.png';
-      a.href = URL.createObjectURL(blob);
-      a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
-    });
+/* ---------- RMS/Mean & réponses ---------- */
+function rms_and_mean_for_shape(A,type,D=0.5){
+  switch(type){
+    case 0: return {rms: A/Math.SQRT2, mean: 0}; // sinus
+    case 1: return {rms: A, mean: 0};            // carré ±A
+    case 2: return {rms: A/Math.sqrt(3), mean: 0}; // triangle
+    case 3: return {rms: A/Math.sqrt(3), mean: 0}; // dent de scie
+    case 4: { const mean=A*(2*D-1); return {rms:A, mean}; } // rect ±A duty D
+    case 5: return {rms: A/2, mean: A/Math.PI}; // demi-redressé sinus
+    case 6: return {rms: A/Math.SQRT2, mean: 2*A/Math.PI}; // double-redressé
+    default: return {rms: A/Math.SQRT2, mean: 0};
+  }
+}
+function compute_correct_answers(){
+  const A = state.amplitude, f = hz(), V0 = state.offsetV;
+  const D = clamp((state.duty||50)/100, 0.01, 0.99);
+  const Umax = V0 + A;
+  const base = rms_and_mean_for_shape(A, state.signalType, D);
+  const Ueff = Math.sqrt( V0*V0 + 2*V0*base.mean + base.rms*base.rms );
+  return {Umax, Ueff, Amp:A, f, base, V0, D};
+}
+function fmtExplain(ans){
+  const {base,V0,D,f} = ans; const A = state.amplitude, type = state.signalType;
+  const names = ['sinus','carré 50%','triangle','dent de scie','rectangulaire (duty)','demi-redressé','double-redressé'];
+  let t = `Type: ${names[type]}, f=${fmt(f,2)} Hz, A=${fmt(A,2)} V, V0=${fmt(V0,2)} V${type===4?`, D=${fmt(D*100,0)}%`:``}\n`;
+  t += `Umax = V0 + A = ${fmt(V0,2)} + ${fmt(A,2)} = ${fmt(V0 + A,2)} V\n`;
+  const cases = {
+    0: `Ueff(signal)=A/√2=${fmt(A,2)}/√2=${fmt(base.rms,2)} V, mean=0`,
+    1: `Ueff(signal)=A (carré ±A), mean=0`,
+    2: `Ueff(signal)=A/√3=${fmt(A,2)}/√3=${fmt(base.rms,2)} V, mean=0`,
+    3: `Ueff(signal)=A/√3=${fmt(A,2)}/√3=${fmt(base.rms,2)} V, mean=0`,
+    4: `Rect ±A, duty D: Ueff(signal)=A, mean=A(2D-1)=${fmt(base.mean,2)} V`,
+    5: `Demi-redressé: Ueff(signal)=A/2=${fmt(base.rms,2)} V, mean=A/π=${fmt(base.mean,2)} V`,
+    6: `Double-redressé: Ueff(signal)=A/√2=${fmt(base.rms,2)} V, mean=2A/π=${fmt(base.mean,2)} V`
   };
-  img.src = url;
+  t += (cases[type] || `Ueff(signal)=A/√2, mean=0`) + '\n';
+  t += `Ueff(total)=√(V0²+2V0·mean+Ueff(signal)²)=${fmt(Math.sqrt(V0*V0+2*V0*base.mean+base.rms*base.rms),2)} V\n`;
+  t += `(Rappel) T=1/f → T=${fmt(1000/f,2)} ms`;
+  return t;
+}
+
+/* ---------- Quiz (non bloquant) + verrou toggle ---------- */
+const modal = document.getElementById('quiz-modal');
+const qUmax = document.getElementById('q-umax');
+const qUeff = document.getElementById('q-ueff');
+const qAmp  = document.getElementById('q-amp');
+const qFreq = document.getElementById('q-freq');
+const qResult = document.getElementById('quiz-result');
+const btnSubmit = document.getElementById('quiz-submit');
+const btnClose  = document.getElementById('quiz-close');
+const btnToggle = document.getElementById('toggle-zone');
+const extraZone = document.getElementById('extra-zone');
+let quizPending = false;
+let pendingQuiz = null;
+
+function resetQuizUI(){ [qUmax,qUeff,qAmp,qFreq].forEach(i=>i.value=''); qResult.style.display='none'; qResult.textContent=''; }
+function openQuiz(){ resetQuizUI(); modal.style.display='block'; quizPending = true; btnToggle.disabled = true; }
+function closeQuiz(){ modal.style.display='none'; }
+
+function withinTol(user,correct){
+  const tolRel=0.02, tolAbs=0.02; const diff=Math.abs(user-correct);
+  return diff <= Math.max(tolAbs, Math.abs(correct)*tolRel);
+}
+btnSubmit.onclick=()=>{
+  if(!pendingQuiz) return;
+  const a=pendingQuiz.answers;
+  const u={Umax:+qUmax.value, Ueff:+qUeff.value, Amp:+qAmp.value, Freq:+qFreq.value};
+  let ok=true, rep=[];
+  if(isNaN(u.Umax)||!withinTol(u.Umax,a.Umax)){ok=false;rep.push(`❌ Umax: ${qUmax.value} V → ${fmt(a.Umax,2)} V`);} else rep.push(`✅ Umax OK`);
+  if(isNaN(u.Ueff)||!withinTol(u.Ueff,a.Ueff)){ok=false;rep.push(`❌ Ueff: ${qUeff.value} V → ${fmt(a.Ueff,2)} V`);} else rep.push(`✅ Ueff OK`);
+  if(isNaN(u.Amp)||!withinTol(u.Amp,a.Amp)){ok=false;rep.push(`❌ Amplitude: ${qAmp.value} V → ${fmt(a.Amp,2)} V`);} else rep.push(`✅ Amplitude OK`);
+  if(isNaN(u.Freq)||!withinTol(u.Freq,a.f)){ok=false;rep.push(`❌ Fréquence: ${qFreq.value} Hz → ${fmt(a.f,2)} Hz`);} else rep.push(`✅ Fréquence OK`);
+
+  quizPending=false; btnToggle.disabled=false;
+
+  if(ok){ qResult.style.display='block'; qResult.innerHTML='<span class="ok">Bravo, tout est correct ✔</span>'; setTimeout(()=>closeQuiz(),600); }
+  else  { qResult.style.display='block'; qResult.textContent=rep.join('\n')+'\n\nDéveloppement :\n'+fmtExplain(a); }
 };
+btnClose.onclick=()=>{ if(quizPending){ qResult.style.display='block'; qResult.textContent="⚠️ Réponds d'abord au questionnaire (Valider) pour pouvoir fermer."; return; } closeQuiz(); };
 
-/* ---------- Mode Aléatoire ---------- */
-/* Tirages utiles */
-function rand(min, max){ return Math.random()*(max-min)+min; }
-function randInt(min, max){ return Math.floor(rand(min, max+1)); }
-function pick(arr){ return arr[randInt(0, arr.length-1)]; }
-// tirage logarithmique (utile pour fréquences & temps/div)
-function randLog(min, max){ const lnMin = Math.log(min), lnMax = Math.log(max); return Math.exp(rand(lnMin, lnMax)); }
-
-function applyStateToInputs(){
-  $('signal-type').value = state.signalType;
-  $('amplitude').value = state.amplitude;
-  $('signal-frequency-value').value = state.fVal;
-  $('signal-frequency-unit').value = state.fUnit;
-  $('offset').value = state.offsetV;
-  $('duty').value = state.duty;
-  $('phase').value = state.phaseDeg;
-  $('scope-scale-volt').value = state.vDiv;
-  $('scope-scale-freq-value').value = state.tDivVal;
-  $('scope-scale-freq-unit').value = state.tDivUnit;
-  $('hpos').value = state.hpos;
-  $('duty-wrap').style.display = (state.signalType === 4) ? 'flex' : 'none';
-}
-
-function describeCurrent(){
-  const types = ['Sinus','Carré','Triangle','Dent de scie','Rect (duty)','Demi-redressé','Double-redressé'];
-  const unitF = (state.fUnit===2?'kHz':'Hz');
-  const unitT = (state.tDivUnit===2?'ms':'µs');
-  let extra = '';
-  if (state.signalType===4) extra = `, duty=${state.duty}%`;
-  return `${types[state.signalType]}, A=${trimNum(state.amplitude)} V, f=${trimNum(state.fVal)} ${unitF}, offset=${trimNum(state.offsetV)} V, phase=${trimNum(state.phaseDeg)}°, V/div=${trimNum(state.vDiv)}, T/div=${trimNum(state.tDivVal)} ${unitT}${extra}`;
-}
-
-/* Tirage d’un signal lisible */
+/* ---------- Random cohérent (affiche d'abord, quiz après) ---------- */
 function randomizeState(){
-  // Type aléatoire
-  state.signalType = randInt(0, 6);
+  state.signalType = randInt(0,6);
+  state.fVal = randInt(10,60);
+  state.tDivVal = chooseCoherentTdivMsFromF(state.fVal); state.tDivUnit=2;
 
-  // Amplitude (favorise 0.5–10 V)
-  state.amplitude = +(randLog(0.2, 20)).toFixed(2);
+  let ampRaw = randInt(1,20), vdivIdx=0;
+  function maxPeakAt(i){ return allowedScale[i]*5 - Math.abs(state.offsetV); }
+  while(vdivIdx<allowedScale.length-1 && maxPeakAt(vdivIdx)<ampRaw) vdivIdx++;
+  state.vDiv = allowedScale[vdivIdx];
+  const maxAmp = Math.max(1, Math.floor(maxPeakAt(vdivIdx)));
+  state.amplitude = Math.min(ampRaw, maxAmp);
 
-  // Fréquence: mélange Hz/kHz (10 Hz → 20 kHz)
-  const useKHz = Math.random() < 0.35;
-  state.fUnit = useKHz ? 2 : 1;
-  const fAbs = useKHz ? randLog(0.5, 20) : randLog(5, 5000); // 0.5–20 kHz ou 5–5000 Hz
-  state.fVal = +fAbs.toFixed(2);
-
-  // Duty si rectangulaire
-  if (state.signalType === 4) state.duty = randInt(5, 95);
-
-  // Offset (limité pour garder lisible)
-  state.offsetV = +rand(-5, 5).toFixed(2);
-
-  // Phase
-  state.phaseDeg = +rand(-180, 180).toFixed(0);
-
-  // Réglages oscillo adaptés automatiquement
-  // V/div pour voir ~2 à 6 divisions en amplitude totale
-  const targetVspan = state.amplitude*2 + Math.abs(state.offsetV)*2; // marge
-  state.vDiv = +clamp(targetVspan/4, 0.1, 10).toFixed(2);
-
-  // Temps/div pour afficher ~1 à 5 périodes sur la largeur
-  // totalTime = tDiv * 10 ≈ (1..5)/f  => tDiv ≈ (1..5)/(10f)
-  const perCount = rand(1, 5);
-  let tDivS = perCount / (10 * state.fVal * (state.fUnit===2?1000:1));
-  // convertir en µs ou ms proprement (arrondi simple)
-  if (tDivS >= 1e-3) { state.tDivUnit = 2; state.tDivVal = +(tDivS*1e3).toFixed(2); } // ms
-  else               { state.tDivUnit = 1; state.tDivVal = +(tDivS*1e6).toFixed(2); } // µs
-
-  // Position horizontale légère
-  state.hpos = randInt(-80, 80);
+  if(state.signalType===4) state.duty = randInt(5,95);
 
   applyStateToInputs();
+
+  // (1) cacher paramètres à chaque tirage
+  extraZone.style.display='none';
+
+  // (2) tracer immédiatement
   render();
-  $('chip-last').textContent = 'Dernier tirage: ' + describeCurrent();
+
+  // (3) quiz
+  pendingQuiz = {answers: compute_correct_answers()};
+  openQuiz();
 }
 
-/* Auto-randomiseur */
-let autoTimer = null;
-$('rand-once').onclick = randomizeState;
-$('auto-rand').onchange = (e)=>{
-  if (e.target.checked){
-    const s = Math.max(0.2, +$('rand-interval').value || 2);
-    autoTimer = setInterval(randomizeState, s*1000);
-    randomizeState();
-  } else {
-    clearInterval(autoTimer); autoTimer=null;
-  }
-};
-$('rand-interval').oninput = ()=>{
-  if (autoTimer){
-    clearInterval(autoTimer); autoTimer=null;
-    const s = Math.max(0.2, +$('rand-interval').value || 2);
-    autoTimer = setInterval(randomizeState, s*1000);
-  }
+/* ---------- Tracer manuel (SANS QUIZ) ---------- */
+function enforceAmplitudeLimit(){
+  const maxA = Math.max(0, state.vDiv*5 - Math.abs(state.offsetV));
+  if(state.amplitude>maxA) state.amplitude = Math.max(0, Math.floor(maxA));
+}
+function applyManual(){
+  state.signalType=+document.getElementById('signal-type').value;
+  state.amplitude=+document.getElementById('amplitude').value||0;
+  state.fVal=+document.getElementById('signal-frequency-value').value||10;
+  state.fVal=clamp(Math.round(state.fVal),10,60);
+  state.duty=+document.getElementById('duty').value||75;
+  state.phaseDeg=+document.getElementById('phase').value||0;
+  state.offsetV=+document.getElementById('offset').value||0;
+  state.vDiv=+document.getElementById('scope-scale-volt').value||1;
+  state.tDivVal=+document.getElementById('scope-scale-freq-value').value||20;
+  state.hpos=+document.getElementById('hpos').value||0;
+
+  enforceAmplitudeLimit();
+  applyStateToInputs();
+  render();
+
+  // déverrouillage + montre les paramètres
+  pendingQuiz=null; quizPending=false; btnToggle.disabled=false; closeQuiz();
+  document.getElementById('extra-zone').style.display='block';
+}
+
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+$('toggle-zone').onclick=()=>{ const ez=$('extra-zone'); if($('toggle-zone').disabled) return; ez.style.display=(ez.style.display==='none')?'block':'none'; };
+$('reset-btn').onclick=()=>{state={signalType:0,amplitude:1,fVal:50,fUnit:1,offsetV:0,duty:75,phaseDeg:0,vDiv:1,tDivVal:20,tDivUnit:2,hpos:0};applyStateToInputs(); /* pas de rendu auto */ };
+$('signal-type').onchange=e=>{state.signalType=+e.target.value;$('duty-wrap').style.display=(state.signalType===4)?'flex':'none';};
+$('amplitude').oninput=e=>{state.amplitude=+e.target.value;};
+$('signal-frequency-value').addEventListener('keydown',e=>{ if(e.key==='Enter'){ let v=+e.currentTarget.value||10; v=clamp(Math.round(v),10,60); e.currentTarget.value=v; state.fVal=v; }});
+$('signal-frequency-value').addEventListener('blur',e=>{ let v=+e.currentTarget.value||10; v=clamp(Math.round(v),10,60); e.currentTarget.value=v; state.fVal=v; });
+$('offset').oninput=e=>{state.offsetV=+e.target.value;};
+$('duty').oninput=e=>{state.duty=+e.target.value;};
+$('phase').oninput=e=>{state.phaseDeg=+e.target.value;};
+$('scope-scale-volt').oninput=e=>{state.vDiv=+e.target.value;};
+$('scope-scale-freq-value').oninput=e=>{state.tDivVal=+e.target.value;};
+$('hpos').oninput=e=>{state.hpos=+e.target.value;};
+$('rand-once').onclick=randomizeState;
+$('apply-btn').onclick=applyManual;
+
+/* ---------- Export PNG ---------- */
+$('export-btn').onclick=()=>{const clone=svg.cloneNode(true);
+  const bg=newEl('rect',{x:0,y:0,width:W,height:H+FOOTER_H,fill:'#fff'}); clone.insertBefore(bg,clone.firstChild);
+  const svgData=new XMLSerializer().serializeToString(clone);
+  const url=URL.createObjectURL(new Blob([svgData],{type:'image/svg+xml;charset=utf-8'}));
+  const img=new Image(); img.onload=()=>{const canvas=document.createElement('canvas');canvas.width=W+20;canvas.height=(H+FOOTER_H)+20;const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,10,10);URL.revokeObjectURL(url);
+    canvas.toBlob(blob=>{const a=document.createElement('a');a.download='oscilloscope.png';a.href=URL.createObjectURL(blob);a.click();});};
+  img.src=url;
 };
 
-/* ---------- Init ---------- */
+/* ---------- Inputs ⇄ État ---------- */
+function applyStateToInputs(){
+  $('signal-type').value=state.signalType;
+  $('amplitude').value=state.amplitude;
+  $('signal-frequency-value').value=state.fVal;
+  $('signal-frequency-unit').value=1;
+  $('offset').value=state.offsetV;
+  $('duty').value=state.duty;
+  $('phase').value=state.phaseDeg;
+  $('scope-scale-volt').value=state.vDiv;
+  $('scope-scale-freq-value').value=state.tDivVal;
+  $('hpos').value=state.hpos;
+  $('duty-wrap').style.display=(state.signalType===4)?'flex':'none';
+}
+
+/* ---------- Start ---------- */
+/* IMPORTANT: pas de render() au démarrage → écran vide jusqu'à action utilisateur */
 applyStateToInputs();
-render();
 </script>
 </body>
 </html>
